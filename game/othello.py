@@ -37,11 +37,11 @@ class GameBoard:
 
     def __init__(self, game_history=None):
         # History of placed pieces (both legal moves and illegal ones, if such are added)
-        self.game_history = game_history
+        self.game_history = game_history if game_history else []
         self.__board = np.full(GameBoard.__BOARD_SIZE, Piece.EMPTY, dtype=object)
 
-        self.__setup_starting_position()
         self.__restore_game_history()
+        self.__setup_starting_position()
 
     def get_board(self):
         return self.__board
@@ -69,7 +69,13 @@ class GameBoard:
 
         if self.game_history:
             for piece, position in self.game_history:
-                self.add_piece(piece, position)
+                # add_piece function without updating game_history
+                self.add_piece_without_flip(piece, position)
+
+                if piece != Piece.EMPTY:
+                    row, col = self.position_to_index(position)
+                    self.__flip_pieces(row, col, piece)
+                # ================================================
 
     def restore_custom_board(self, pieces):
         """
@@ -83,7 +89,15 @@ class GameBoard:
 
         if pieces:
             for piece, position in pieces:
-                self.add_piece_without_flip(piece, position)
+                # add_piece_without_flip function without updating game_history
+                if len(position) != 2 or position[0] not in 'ABCDEFGH' or position[1] not in '12345678':
+                    raise ValueError('Invalid position')
+                if piece not in [Piece.BLACK, Piece.WHITE, Piece.EMPTY]:
+                    raise ValueError('Invalid piece')
+
+                row, col = self.position_to_index(position)
+                self.__board[row, col] = piece
+                # =============================================================
 
     def add_piece_without_flip(self, piece, position):
         """
