@@ -55,10 +55,17 @@ class GameBoard:
         which is the standard initial setup for every game.
         """
 
-        self.add_piece(Piece.BLACK, 'E4')
-        self.add_piece(Piece.BLACK, 'D5')
-        self.add_piece(Piece.WHITE, 'E5')
-        self.add_piece(Piece.WHITE, 'D4')
+        row, col = self.position_to_index("E4")
+        self.__board[row, col] = Piece.BLACK
+
+        row, col = self.position_to_index("D5")
+        self.__board[row, col] = Piece.BLACK
+
+        row, col = self.position_to_index("E5")
+        self.__board[row, col] = Piece.WHITE
+
+        row, col = self.position_to_index("D4")
+        self.__board[row, col] = Piece.WHITE
 
     def __restore_game_history(self):
         """
@@ -70,7 +77,15 @@ class GameBoard:
         if self.game_history:
             for piece, position in self.game_history:
                 # add_piece function without updating game_history
-                self.add_piece_without_flip(piece, position)
+                # add_piece_without_flip function without updating game_history
+                if len(position) != 2 or position[0] not in 'ABCDEFGH' or position[1] not in '12345678':
+                    raise ValueError('Invalid position')
+                if piece not in [Piece.BLACK, Piece.WHITE, Piece.EMPTY]:
+                    raise ValueError('Invalid piece')
+
+                row, col = self.position_to_index(position)
+                self.__board[row, col] = piece
+                # =============================================================
 
                 if piece != Piece.EMPTY:
                     row, col = self.position_to_index(position)
