@@ -104,6 +104,8 @@ game = Othello(game_history)
 game.play()
 ```
 
+<img width="350" height="305" alt="image" src="https://github.com/user-attachments/assets/4c0407ea-147e-49c3-b378-38c83a781b3c" />
+
 Use this approach when:
 
 * Replaying real games
@@ -151,6 +153,8 @@ game = Othello()
 game.board.restore_custom_board(game_history)
 game.play()
 ```
+
+<img width="350" height="305" alt="image" src="https://github.com/user-attachments/assets/c94a4a30-1d98-4950-b02f-32beeb72a650" />
 
 Use this approach when:
 
