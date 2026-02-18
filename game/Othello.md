@@ -29,7 +29,7 @@ from othello import GameBoard, Piece
 board = GameBoard()
 
 moves = board.get_legal_moves(Piece.WHITE)
-board.add_piece(Piece.BLACK, moves[0]) # Example
+board.add_piece(Piece.WHITE, moves[0]) # Example
 ```
 
 Use this for:
@@ -61,7 +61,6 @@ Use this for:
 * Testing edge cases
 * Constructing partially invalid positions intentionally
 
----
 
 # Board Initialization
 
@@ -158,7 +157,6 @@ Use this approach when:
 * Running experiments
 * Creating artificial positions
 
----
 
 # Saving the Board State
 
@@ -177,3 +175,41 @@ The returned format is:
 ```
 
 This list contains **all pieces that were added to the board**, in the order they were placed.
+
+# Highlighting and Displaying the Board
+
+To display the board, you can:
+
+```python
+from othello import GameBoard
+
+board = GameBoard()
+
+print(board)
+
+# or
+board.display()
+```
+
+Output:
+
+```terminaloutput
+   A  B  C  D  E  F  G  H
+1  ·  ·  ·  ·  ·  ·  ·  ·
+2  ·  ·  ●  ·  ●  ·  ·  ·
+3  ·  ·  ●  ●  ●  ●  ●  ·
+4  ·  ·  ·  ●  ●  ·  ·  ·
+5  ·  ·  ·  ●  ●  ·  ·  ·
+6  ·  ·  ·  ·  ●  ●  ·  ·
+7  ·  ·  ·  ·  ·  ·  ·  ·
+8  ·  ·  ·  ·  ·  ·  ·  ·
+```
+
+Or display the board with selected positions highlighted:
+
+```python
+board = GameBoard()
+positions_to_highlight = ["C4", "B2"]
+
+board.display(positions_to_highlight)
+```
