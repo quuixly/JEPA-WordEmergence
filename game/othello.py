@@ -303,11 +303,11 @@ class Othello:
     """
 
     def __init__(self, game_history=None):
-        self.game_history = game_history
-        self.board = GameBoard(game_history)
-        self.player_turn = self.determine_starting_player()
+        self.__game_history = game_history
+        self.board = GameBoard(self.__game_history)
+        self.player_turn = self.__determine_starting_player()
 
-    def determine_starting_player(self):
+    def __determine_starting_player(self):
         """
         Determines which player should move next.
 
@@ -317,14 +317,14 @@ class Othello:
         :return: Piece.BLACK or Piece.WHITE
         """
 
-        if not self.game_history:
+        if not self.__game_history:
             return Piece.BLACK
 
-        last_piece = self.game_history[-1][0]
+        last_piece = self.__game_history[-1][0]
 
         return Piece.BLACK if last_piece == Piece.WHITE else Piece.WHITE
 
-    def display(self, highlight_positions=None):
+    def __display(self, highlight_positions=None):
         """
         Displays the current board state, optionally highlighting specific positions.
 
@@ -333,7 +333,7 @@ class Othello:
 
         self.board.display(highlight_positions)
 
-    def get_legal_moves(self):
+    def __get_legal_moves(self):
         """
         Returns all legal moves for the current player.
 
@@ -342,7 +342,7 @@ class Othello:
 
         return self.board.get_legal_moves(self.player_turn)
 
-    def switch_turn(self):
+    def __switch_turn(self):
         """
         Switches the turn to the other player.
         If the current turn is WHITE, it changes to BLACK, and vice versa.
@@ -350,7 +350,7 @@ class Othello:
 
         self.player_turn = Piece.BLACK if self.player_turn == Piece.WHITE else Piece.WHITE
 
-    def input_move(self, legal_moves):
+    def __input_move(self, legal_moves):
         """
         Prompts the player to enter a move until a valid one is provided.
 
@@ -366,7 +366,7 @@ class Othello:
 
             print("Invalid move. Try again.")
 
-    def check_game_over(self):
+    def __check_game_over(self):
         """
         Checks whether the game is over.
         The game is over if neither the current player nor the opponent has any legal moves.
@@ -374,14 +374,14 @@ class Othello:
         :return: True if the game has ended, False otherwise
         """
 
-        current_moves = self.get_legal_moves()
+        current_moves = self.__get_legal_moves()
 
         opponent = Piece.BLACK if self.player_turn == Piece.WHITE else Piece.WHITE
         opponent_moves = self.board.get_legal_moves(opponent)
 
         return not current_moves and not opponent_moves
 
-    def print_result(self):
+    def __print_result(self):
         """
         Prints the final result of the game, including the score and the winner.
 
@@ -418,24 +418,24 @@ class Othello:
 
         while True:
             print(f"\nCurrent turn: {'Black' if self.player_turn == Piece.BLACK else 'White'}")
-            legal_moves = self.get_legal_moves()
-            self.display(legal_moves)
+            legal_moves = self.__get_legal_moves()
+            self.__display(legal_moves)
 
             if not legal_moves:
                 print(f"No legal moves for {'Black' if self.player_turn == Piece.BLACK else 'White'}. Skipping turn.")
-                self.switch_turn()
+                self.__switch_turn()
 
-                if self.check_game_over():
+                if self.__check_game_over():
                     break
 
                 continue
 
-            move = self.input_move(legal_moves)
+            move = self.__input_move(legal_moves)
             self.board.add_piece(self.player_turn, move)
-            self.switch_turn()
+            self.__switch_turn()
 
-        self.display()
-        self.print_result()
+        self.__display()
+        self.__print_result()
 
 
 if __name__ == '__main__':
