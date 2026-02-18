@@ -144,7 +144,6 @@ class GameBoard:
         if piece != Piece.EMPTY:
             row, col = self.position_to_index(position)
             self.__flip_pieces(row, col, piece)
-            self.game_history.append((piece, position))
 
     def __flip_pieces(self, row, col, player):
         """
