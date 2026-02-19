@@ -8,6 +8,7 @@ class Embedding(nn.Module):
         super().__init__()
         self.vocabulary_size = vocabulary_size
         self.dimension = dimension
+        # During learning only selected rows will be updated (see forward method)
         self.weights = nn.Parameter(torch.randn(vocabulary_size, dimension), requires_grad=True)
 
     def forward(self, x):
