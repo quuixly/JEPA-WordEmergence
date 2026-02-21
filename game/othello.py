@@ -40,8 +40,8 @@ class GameBoard:
         self.game_history = game_history if game_history else []
         self.__board = np.full(GameBoard.__BOARD_SIZE, Piece.EMPTY, dtype=object)
 
-        self.__restore_game_history()
         self.__setup_starting_position()
+        self.__restore_game_history()
 
     def get_board(self):
         return self.__board
