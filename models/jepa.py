@@ -1,0 +1,159 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+class MaskedMultiHeadAttention(nn.Module):
+    def __init__(self, d_model, num_heads, dropout_rate=0.1):
+        super().__init__()
+        assert d_model % num_heads == 0
+
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.head_dim = d_model // num_heads
+        self.dropout_rate = dropout_rate
+
+        self.q_proj = nn.Linear(d_model, d_model)
+        self.k_proj = nn.Linear(d_model, d_model)
+        self.v_proj = nn.Linear(d_model, d_model)
+
+        self.out_proj = nn.Linear(d_model, d_model)
+
+    def forward(self, x):
+        batch_size, seq_len, _ = x.size()
+
+        q = self.q_proj(x)
+        k = self.k_proj(x)
+        v = self.v_proj(x)
+
+        q = q.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        k = k.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        v = v.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attn_output = F.scaled_dot_product_attention(
+            query=q,
+            key=k,
+            value=v,
+            attn_mask=None,
+            dropout_p=self.dropout_rate if self.training else 0.0,
+            is_causal=True
+        )
+
+        attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, seq_len, self.d_model)
+
+        return self.out_proj(attn_output)
+
+
+class DecoderLayer(nn.Module):
+    def __init__(self, n_heads, d_model, dropout_rate=0.1):
+        super().__init__()
+        self.attention_layer = MaskedMultiHeadAttention(d_model, n_heads, dropout_rate)
+        self.norm = nn.LayerNorm(d_model)
+        self.feed_forward = nn.Sequential(
+            nn.Linear(d_model, 4 * d_model),
+            nn.GELU(),
+            nn.Linear(4 * d_model, d_model),
+            nn.Dropout(dropout_rate)
+        )
+        self.add_and_norm = nn.LayerNorm(d_model)
+
+    def forward(self, x):
+        x = x + self.attention_layer(self.norm(x))
+        x = x + self.feed_forward(self.add_and_norm(x))
+
+        return x
+
+
+class ContextEncoder(nn.Module):
+    def __init__(self, n_layers = 4, n_heads = 8, d_model = 512, vocabulary_size = 61, context_window=61, dropout_rate=0.1):
+        super().__init__()
+        self.embedding = nn.Embedding(vocabulary_size, d_model)
+        self.positional_encoding = nn.Parameter(torch.zeros(context_window, d_model))
+        self.decoder_stack = nn.Sequential(
+            *[DecoderLayer(n_heads, d_model, dropout_rate) for _ in range(n_layers)]
+        )
+        self.head_norm = nn.LayerNorm(d_model)
+
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            module.weight.data.normal_(mean=0.0, std=0.02)
+            if isinstance(module, nn.Linear) and module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
+    def forward(self, x):
+        batch_size, sequence_length = x.shape
+
+        embedding = self.embedding(x)
+        embedding = embedding + self.positional_encoding[:sequence_length, :]
+        x = self.decoder_stack(embedding)
+        y = self.head_norm(x)
+
+        return y
+
+
+class TargetEncoder(nn.Module):
+    def __init__(self, n_layers = 4, n_heads = 8, d_model = 512, vocabulary_size = 61, context_window=61, dropout_rate=0.1,
+                 momentum = 0.996):
+        super().__init__()
+        self.momentum = momentum
+        self.embedding = nn.Embedding(vocabulary_size, d_model)
+        self.positional_encoding = nn.Parameter(torch.zeros(context_window, d_model))
+        self.decoder_stack = nn.Sequential(
+            *[DecoderLayer(n_heads, d_model, dropout_rate) for _ in range(n_layers)]
+        )
+        self.head_norm = nn.LayerNorm(d_model)
+
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            module.weight.data.normal_(mean=0.0, std=0.02)
+            if isinstance(module, nn.Linear) and module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
+    def forward(self, x):
+        batch_size, sequence_length = x.shape
+
+        embedding = self.embedding(x)
+        embedding = embedding + self.positional_encoding[:sequence_length, :]
+        x = self.decoder_stack(embedding)
+        y = self.head_norm(x)
+
+        return y
+
+    @torch.no_grad()
+    def step(self, context_encoder):
+        for param_c, param_t in zip(context_encoder.parameters(),
+                                    self.parameters()):
+            param_t.data = self.momentum * param_t.data + (1 - self.momentum) * param_c.data
+
+
+class Predictor(nn.Module):
+    def __init__(self, d_model=512, hidden_dim=1024, dropout_rate = 0.1):
+        super().__init__()
+        self.nn = nn.Sequential(
+            nn.Linear(d_model, hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, d_model),
+            nn.Dropout(dropout_rate)
+        )
+
+        self.__init_weights()
+
+    def __init_weights(self):
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                module.weight.data.normal_(mean=0.0, std=0.02)
+                if module.bias is not None:
+                    module.bias.data.zero_()
+
+    def forward(self, x):
+        return self.nn(x)
