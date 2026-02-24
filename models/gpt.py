@@ -69,8 +69,8 @@ class GPT(nn.Module):
         super().__init__()
         self.embedding = nn.Embedding(vocabulary_size, d_model)
         self.positional_encoding = nn.Parameter(torch.zeros(context_window, d_model))
-        self.decoder_stack = nn.Sequential(
-            *[DecoderLayer(n_heads, d_model, dropout_rate) for _ in range(n_layers)]
+        self.decoder_stack = nn.ModuleList(
+            [DecoderLayer(n_heads, d_model, dropout_rate) for _ in range(n_layers)]
         )
         self.head_norm = nn.LayerNorm(d_model)
         self.head = nn.Linear(d_model, vocabulary_size)
@@ -89,10 +89,38 @@ class GPT(nn.Module):
     def forward(self, x):
         batch_size, sequence_length = x.shape
 
-        embedding = self.embedding(x)
-        embedding = embedding + self.positional_encoding[:sequence_length, :]
-        x = self.decoder_stack(embedding)
+        x = self.embedding(x)
+        x = x + self.positional_encoding[:sequence_length, :]
+        for layer in self.decoder_stack:
+            x = layer(x)
         x = self.head_norm(x)
         y = self.head(x)
 
         return y
+
+    def get_optimizer(self, weight_decay=0.005, lr=3e-4, betas=(0.9, 0.95)):
+        decay = set()
+        no_decay = set()
+        whitelist_weight_modules = (torch.nn.Linear,)
+        blacklist_weight_modules = (torch.nn.LayerNorm, torch.nn.Embedding)
+        for mn, m in self.named_modules():
+            for pn, p in m.named_parameters():
+                fpn = f"{mn}.{pn}" if mn else pn
+                if pn.endswith('bias'):
+                    no_decay.add(fpn)
+                elif pn.endswith('weight') and isinstance(m, whitelist_weight_modules):
+                    decay.add(fpn)
+                elif pn.endswith('weight') and isinstance(m, blacklist_weight_modules):
+                    no_decay.add(fpn)
+        no_decay.add('positional_encoding')
+        param_dict = {pn: p for pn, p in self.named_parameters()}
+        assert len(decay & no_decay) == 0
+        assert len(param_dict.keys() - (decay | no_decay)) == 0
+        optim_groups = [
+            {"params": [param_dict[pn] for pn in sorted(list(decay))], "weight_decay": weight_decay},
+            {"params": [param_dict[pn] for pn in sorted(list(no_decay))], "weight_decay": 0.0},
+        ]
+        return torch.optim.AdamW(optim_groups, lr=lr, betas=betas)
+
+    def get_loss_fn(self):
+        return nn.CrossEntropyLoss()
