@@ -2,6 +2,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from dataset.dataset import OthelloDataset
+from models.trainer import Trainer
+
 
 class MaskedMultiHeadAttention(nn.Module):
     def __init__(self, d_model, num_heads, dropout_rate=0.1):
