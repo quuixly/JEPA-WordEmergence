@@ -6,10 +6,11 @@ import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, DistributedSampler
+from tqdm import tqdm
 
 
 class Trainer:
-    def __init__(self, dataset, model, batch_size=32, save_every=1, lr_decay=False,
+    def __init__(self, dataset, model, batch_size=32, save_every=100, lr_decay=False,
                  warmup_tokens=375e6, final_tokens=260e9):
         self.lr_decay = lr_decay
         self.warmup_tokens = warmup_tokens
@@ -41,6 +42,7 @@ class Trainer:
         self.loss_fn = self.model.get_loss_fn()
         self.model = DDP(self.model, device_ids=[self.local_rank])
 
+        self.global_step = 0
         self.save_every = save_every
 
     def __setup(self):
@@ -70,6 +72,10 @@ class Trainer:
             for epoch in range(num_epochs):
                 self.sampler.set_epoch(epoch)
 
+                pbar = None
+                if self.rank == 0:
+                    pbar = tqdm(total=len(self.data_loader), desc=f"Epoch {epoch + 1}/{num_epochs}")
+
                 for batch_idx, (inputs, targets) in enumerate(self.data_loader):
                     inputs = inputs.to(self.device)
                     targets = targets.to(self.device)
@@ -79,6 +85,19 @@ class Trainer:
                     loss = self.loss_fn(outputs, targets)
                     loss.backward()
                     torch.nn.utils.clip_grad_norm_(self.model.module.parameters(), 1.0)
+
+                    with torch.no_grad():
+                        preds = torch.argmax(outputs, dim=-1)
+                        mask = (targets != 61)
+
+                        correct_local = (preds == targets)[mask].sum().float()
+                        total_local = mask.sum().float()
+
+                        stats = torch.tensor([correct_local, total_local], device=self.device)
+
+                        dist.all_reduce(stats, op=dist.ReduceOp.SUM)
+
+                        avg_acc = (stats[0] / stats[1]).item()
 
                     if self.lr_decay:
                         batch_tokens = (targets >= 0).sum()
@@ -95,14 +114,26 @@ class Trainer:
                         for param_group in self.optimizer.param_groups:
                             param_group['lr'] = lr
 
+                    self.global_step += 1
                     self.optimizer.step()
 
-                    if batch_idx % 10 == 0 and self.rank == 0:
-                        print(f"Epoch [{epoch+1}/{num_epochs}], Step [{batch_idx}/{len(self.data_loader)}], Loss: {loss.item():.4f}")
+                    if self.rank == 0 and pbar is not None:
+                        pbar.set_postfix({
+                            "loss": f"{loss.item():.4f}",
+                            "acc": f"{avg_acc:.4f}",
+                            "lr": f"{lr:.2e}" if self.lr_decay else self.optimizer.param_groups[0]['lr']
+                        })
+                        pbar.update(1)
 
-                if self.rank == 0 and (epoch + 1) % self.save_every == 0:
-                    torch.save(self.model.module.state_dict(), f"model_epoch_{epoch+1}.pt")
-                dist.barrier()
+                    if self.rank == 0 and self.global_step % self.save_every == 0:
+                        checkpoint = {
+                            'model_state_dict': self.model.module.state_dict(),
+                            'optimizer_state_dict': self.optimizer.state_dict(),
+                            'global_step': self.global_step,
+                            'epoch': epoch
+                        }
+                        torch.save(checkpoint, f"checkpoints/checkpoint_step_{self.global_step}.pt")
+                    # dist.barrier()
         finally:
             self.__cleanup()
 

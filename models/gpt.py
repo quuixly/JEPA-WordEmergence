@@ -136,5 +136,5 @@ class GPT(nn.Module):
 if __name__ == "__main__":
     dataset = OthelloDataset()
     model = GPT()
-    trainer = Trainer(dataset, model, 32, 1, True)
+    trainer = Trainer(dataset, model, 5000, 100, True)
     trainer.train()
