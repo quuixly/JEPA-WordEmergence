@@ -26,7 +26,7 @@ class MaskedMultiHeadAttention(nn.Module):
 
         self.out_proj = nn.Linear(d_model, d_model)
 
-    def forward(self, x):
+    def forward(self, x, padding_mask):
         batch_size, seq_len, _ = x.size()
 
         q = self.q_proj(x)
@@ -37,11 +37,15 @@ class MaskedMultiHeadAttention(nn.Module):
         k = k.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = v.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
 
+        attn_mask = None
+        if padding_mask is not None:
+            attn_mask = padding_mask.unsqueeze(1).unsqueeze(2)
+
         attn_output = F.scaled_dot_product_attention(
             query=q,
             key=k,
             value=v,
-            attn_mask=None,
+            attn_mask=attn_mask,
             dropout_p=self.dropout_rate if self.training else 0.0,
             is_causal=True
         )
@@ -64,8 +68,8 @@ class DecoderLayer(nn.Module):
         )
         self.add_and_norm = nn.LayerNorm(d_model)
 
-    def forward(self, x):
-        x = x + self.attention_layer(self.norm(x))
+    def forward(self, x, padding_mask):
+        x = x + self.attention_layer(self.norm(x), padding_mask)
         x = x + self.feed_forward(self.add_and_norm(x))
 
         return x
@@ -95,11 +99,12 @@ class GPT(nn.Module):
 
     def forward(self, x):
         batch_size, sequence_length = x.shape
+        padding_mask = (x != 61)
 
         x = self.embedding(x)
         x = x + self.positional_encoding[:sequence_length, :]
         for layer in self.decoder_stack:
-            x = layer(x)
+            x = layer(x, padding_mask)
         x = self.head_norm(x)
         y = self.head(x)
 
