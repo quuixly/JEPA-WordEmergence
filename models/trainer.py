@@ -32,8 +32,10 @@ class Trainer:
             sampler=self.sampler,
             shuffle=False,
             pin_memory=True,
-            num_workers=2,
-            worker_init_fn=seed_worker
+            num_workers=1,
+            worker_init_fn=seed_worker,
+            persistent_workers=True,
+            prefetch_factor=2
         )
 
         self.device = torch.device(f"cuda:{self.local_rank}")
