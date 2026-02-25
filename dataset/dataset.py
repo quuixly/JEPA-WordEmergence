@@ -26,7 +26,6 @@ class OthelloDataset(Dataset):
             with open(file, "rb") as f:
                 batches = pickle.load(f)
                 self.data.extend(batches)
-                break
 
         if self.num_samples > 0:
             self.data = self.data[:self.num_samples]

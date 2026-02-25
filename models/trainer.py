@@ -41,6 +41,7 @@ class Trainer:
         self.optimizer = self.model.get_optimizer()
         self.loss_fn = self.model.get_loss_fn()
         self.model = DDP(self.model, device_ids=[self.local_rank])
+        self.model = torch.compile(self.model)
 
         self.global_step = 0
         self.save_every = save_every
