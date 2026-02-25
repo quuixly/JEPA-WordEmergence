@@ -32,7 +32,7 @@ class Trainer:
             sampler=self.sampler,
             shuffle=False,
             pin_memory=True,
-            num_workers=4,
+            num_workers=5,
             worker_init_fn=seed_worker
         )
 
@@ -68,7 +68,7 @@ class Trainer:
         np.random.seed(seed)
         random.seed(seed)
 
-    def train(self, num_epochs=10):
+    def train(self, num_epochs=1000):
         try:
             for epoch in range(num_epochs):
                 self.sampler.set_epoch(epoch)
@@ -78,8 +78,8 @@ class Trainer:
                     pbar = tqdm(total=len(self.data_loader), desc=f"Epoch {epoch + 1}/{num_epochs}")
 
                 for batch_idx, (inputs, targets) in enumerate(self.data_loader):
-                    inputs = inputs.to(self.device)
-                    targets = targets.to(self.device)
+                    inputs = inputs.to(self.device, non_blocking=True)
+                    targets = targets.to(self.device, non_blocking=True)
 
                     self.optimizer.zero_grad()
                     outputs = self.model(inputs)
