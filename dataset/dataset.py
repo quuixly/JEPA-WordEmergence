@@ -91,8 +91,8 @@ class OthelloDataset(Dataset):
             if num_samples > 0 and len(all_inputs) >= num_samples:
                 break
 
-        self.inputs = torch.tensor(all_inputs, dtype=torch.long)
-        self.targets = torch.tensor(all_targets, dtype=torch.long)
+        self.inputs = torch.tensor(all_inputs, dtype=torch.uint8)
+        self.targets = torch.tensor(all_targets, dtype=torch.uint8)
 
         cache_path = "dataset_cache.pt"
         if os.path.exists(cache_path):
@@ -100,9 +100,6 @@ class OthelloDataset(Dataset):
             self.inputs, self.targets = data['in'], data['out']
         else:
             torch.save({'in': self.inputs, 'out': self.targets}, cache_path)
-
-        self.inputs.share_memory_()
-        self.targets.share_memory_()
 
         print("Dataset ready.")
         print("Shape:", self.inputs.shape)

@@ -47,8 +47,7 @@ def worker_game_generator(queue, seed):
 class OthelloDatasetGenerator:
     @staticmethod
     def _hash_sequence(seq):
-        s = str(seq).encode()
-        return hashlib.sha256(s).hexdigest()
+        return hash(tuple(seq))
 
     @staticmethod
     def _save_batch(data_batch, folder, batch_index):
@@ -132,6 +131,7 @@ class OthelloDatasetGenerator:
                         continue
 
                     test_data.append(subsequence)
+                    train_subsequences_lookup.add(subseq_hash)
                     pbar.update(1)
                     pbar.set_postfix({'RAM_MB': f"{get_memory_mb():.1f}"})
 
@@ -143,6 +143,11 @@ class OthelloDatasetGenerator:
             if test_data:
                 OthelloDatasetGenerator._save_batch(test_data, test_folder, batch_index)
 
+            with open('seen_games_hashes.pkl', 'wb') as f:
+                pickle.dump(seen_games_hashes, f, protocol=5)
+            with open('train_subsequences_lookup.pkl', 'wb') as f:
+                pickle.dump(train_subsequences_lookup, f, protocol=5)
+
         finally:
             for p in workers:
                 p.terminate()
@@ -151,7 +156,7 @@ class OthelloDatasetGenerator:
 
 if __name__ == '__main__':
     N_TRAIN = 20_000_000
-    N_TEST = 1_000_000
+    N_TEST = 2_000_000
     BATCH_SIZE = 500_000
 
     OthelloDatasetGenerator.generate(
