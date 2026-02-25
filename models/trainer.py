@@ -8,10 +8,12 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, DistributedSampler
 from tqdm import tqdm
 
+torch.set_float32_matmul_precision('high')
+
 
 class Trainer:
     def __init__(self, dataset, model, batch_size=32, save_every=100, lr_decay=False,
-                 warmup_tokens=375e6, final_tokens=260e9):
+                 warmup_tokens=100_000_000, final_tokens=1_500_000_000):
         self.lr_decay = lr_decay
         self.warmup_tokens = warmup_tokens
         self.final_tokens = final_tokens
@@ -32,7 +34,7 @@ class Trainer:
             sampler=self.sampler,
             shuffle=False,
             pin_memory=True,
-            num_workers=1,
+            num_workers=5,
             worker_init_fn=seed_worker,
             persistent_workers=True,
             prefetch_factor=2
