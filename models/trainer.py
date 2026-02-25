@@ -32,7 +32,7 @@ class Trainer:
             sampler=self.sampler,
             shuffle=False,
             pin_memory=True,
-            num_workers=5,
+            num_workers=2,
             worker_init_fn=seed_worker
         )
 
@@ -69,6 +69,7 @@ class Trainer:
         random.seed(seed)
 
     def train(self, num_epochs=1000):
+        avg_acc = 0
         try:
             for epoch in range(num_epochs):
                 self.sampler.set_epoch(epoch)
@@ -87,7 +88,7 @@ class Trainer:
                     loss.backward()
                     torch.nn.utils.clip_grad_norm_(self.model.module.parameters(), 1.0)
 
-                    if self.rank == 0 and self.global_step % 100 == 0:
+                    if self.rank == 0 and self.global_step % 10 == 0:
                         with torch.no_grad():
                             preds = torch.argmax(outputs, dim=-1)
                             mask = (targets != 61)
