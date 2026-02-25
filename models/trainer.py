@@ -87,6 +87,7 @@ class Trainer:
                     loss.backward()
                     torch.nn.utils.clip_grad_norm_(self.model.module.parameters(), 1.0)
 
+                    if self.rank == 0 and self.global_step % 100 == 0:
                     with torch.no_grad():
                         preds = torch.argmax(outputs, dim=-1)
                         mask = (targets != 61)
