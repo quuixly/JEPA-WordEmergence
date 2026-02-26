@@ -5,49 +5,39 @@ import hashlib
 import os
 import pickle
 import multiprocessing
-import psutil
-import time
+import itertools
 
 
-def get_memory_mb():
-    process = psutil.Process(os.getpid())
-    return process.memory_info().rss / (1024 * 1024)
+def generate_single_game(seed):
+    rng = random.Random(seed)
+    board = GameBoard()
+    current_player = Piece.BLACK
+    passed_previously = False
 
-def worker_game_generator(queue, seed):
-    random.seed(seed)
+    history = []
 
     while True:
-        try:
-            board = GameBoard()
-            current_player = Piece.BLACK
+        legal_moves = board.get_legal_moves(current_player)
+        if not legal_moves:
+            if passed_previously:
+                break
+            passed_previously = True
+        else:
             passed_previously = False
+            move = rng.choice(legal_moves)
+            board.add_piece(current_player, move)
 
-            while True:
-                legal_moves = board.get_legal_moves(current_player)
-                if not legal_moves:
-                    if passed_previously:
-                        break
-                    passed_previously = True
-                else:
-                    passed_previously = False
-                    move = random.choice(legal_moves)
-                    board.add_piece(current_player, move)
+            history.append(move)
 
-                current_player = Piece.BLACK if current_player == Piece.WHITE else Piece.WHITE
+        current_player = Piece.BLACK if current_player == Piece.WHITE else Piece.WHITE
 
-            queue.put(board.get_game_history())
-
-        except BrokenPipeError:
-            break
-        except Exception as e:
-            print(f"Worker error: {e}")
-            break
+    return history
 
 
 class OthelloDatasetGenerator:
     @staticmethod
     def _hash_sequence(seq):
-        return hash(tuple(seq))
+        return hashlib.sha1(pickle.dumps(seq)).digest()
 
     @staticmethod
     def _save_batch(data_batch, folder, batch_index):
@@ -57,111 +47,53 @@ class OthelloDatasetGenerator:
             pickle.dump(data_batch, f)
 
     @staticmethod
-    def generate(n_train, n_test, batch_size=500_000, train_folder='train', test_folder='test'):
-        num_workers = os.cpu_count()
-        if num_workers is None: num_workers = 4
+    def generate(n_train, batch_size=500_000, train_folder='train'):
+        num_workers = os.cpu_count() or 4
+        seen_games_hashes = set()
+        train_data = []
+        batch_index = 0
 
-        queue = multiprocessing.Queue(maxsize=1000)
+        with multiprocessing.Pool(num_workers) as pool:
+            seeds = itertools.count()
 
-        workers = []
-        print(f"Number of workers: {num_workers}")
+            with tqdm(total=n_train) as pbar:
+                for full_history in pool.imap_unordered(generate_single_game, seeds, chunksize=500):
 
-        for i in range(num_workers):
-            seed = random.randint(0, 10 ** 9) + i
-            p = multiprocessing.Process(target=worker_game_generator, args=(queue, seed))
-            p.daemon = True
-            p.start()
-            workers.append(p)
-
-        try:
-            seen_games_hashes = set()
-            train_subsequences_lookup = set()
-
-            def get_next_unique_game_from_queue():
-                while True:
-                    full_history = queue.get()
+                    if not full_history:
+                        continue
 
                     game_hash = OthelloDatasetGenerator._hash_sequence(full_history)
-                    if game_hash not in seen_games_hashes:
-                        seen_games_hashes.add(game_hash)
-                        return full_history
+                    if game_hash in seen_games_hashes:
+                        continue
 
-            train_data = []
-            batch_index = 0
+                    seen_games_hashes.add(game_hash)
 
-            print(f"Train Set ({n_train})...")
-            with tqdm(total=n_train) as pbar:
-                while (batch_index * batch_size) + len(train_data) < n_train:
-                    full_history = get_next_unique_game_from_queue()
+                    padded_game = list(full_history)
+                    if len(padded_game) < 60:
+                        padded_game += [-100] * (60 - len(padded_game))
 
-                    if len(full_history) == 0: continue
-                    k = random.randint(1, len(full_history))
-                    subsequence = full_history[:k]
-
-                    subseq_hash = OthelloDatasetGenerator._hash_sequence(subsequence)
-                    train_subsequences_lookup.add(subseq_hash)
-
-                    train_data.append(subsequence)
+                    train_data.append(padded_game)
                     pbar.update(1)
-                    pbar.set_postfix({'RAM_MB': f"{get_memory_mb():.1f}"})
 
                     if len(train_data) >= batch_size:
                         OthelloDatasetGenerator._save_batch(train_data, train_folder, batch_index)
                         train_data = []
                         batch_index += 1
 
-            if train_data:
-                OthelloDatasetGenerator._save_batch(train_data, train_folder, batch_index)
-                train_data = []
+                    if len(seen_games_hashes) >= n_train:
+                        break
 
-            test_data = []
-            batch_index = 0
+        if train_data:
+            OthelloDatasetGenerator._save_batch(train_data, train_folder, batch_index)
 
-            print(f"Test Set ({n_test})...")
-            with tqdm(total=n_test) as pbar:
-                while (batch_index * batch_size) + len(test_data) < n_test:
-                    full_history = get_next_unique_game_from_queue()
-
-                    if len(full_history) == 0: continue
-                    k = random.randint(1, len(full_history))
-                    subsequence = full_history[:k]
-                    subseq_hash = OthelloDatasetGenerator._hash_sequence(subsequence)
-
-                    if subseq_hash in train_subsequences_lookup:
-                        continue
-
-                    test_data.append(subsequence)
-                    train_subsequences_lookup.add(subseq_hash)
-                    pbar.update(1)
-                    pbar.set_postfix({'RAM_MB': f"{get_memory_mb():.1f}"})
-
-                    if len(test_data) >= batch_size:
-                        OthelloDatasetGenerator._save_batch(test_data, test_folder, batch_index)
-                        test_data = []
-                        batch_index += 1
-
-            if test_data:
-                OthelloDatasetGenerator._save_batch(test_data, test_folder, batch_index)
-
-            with open('seen_games_hashes.pkl', 'wb') as f:
-                pickle.dump(seen_games_hashes, f, protocol=5)
-            with open('train_subsequences_lookup.pkl', 'wb') as f:
-                pickle.dump(train_subsequences_lookup, f, protocol=5)
-
-        finally:
-            for p in workers:
-                p.terminate()
-                p.join()
 
 
 if __name__ == '__main__':
     N_TRAIN = 20_000_000
-    N_TEST = 2_000_000
     BATCH_SIZE = 500_000
 
     OthelloDatasetGenerator.generate(
-        N_TRAIN, N_TEST,
+        N_TRAIN,
         batch_size=BATCH_SIZE,
-        train_folder='train',
-        test_folder='test'
+        train_folder='train'
     )
