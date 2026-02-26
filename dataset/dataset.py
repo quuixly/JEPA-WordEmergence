@@ -10,10 +10,29 @@ class OthelloDataset(Dataset):
             raise FileNotFoundError(f"Cache file not found: {cache_path}")
 
         data = torch.load(cache_path)
-        self.inputs, self.targets = data['in'].share_memory_(), data['out'].share_memory_()
+        inputs, targets = data['in'], data['out']
 
         print(f"Loaded dataset from cache: {cache_path}")
-        print("Shape:", self.inputs.shape)
+        print("Original shape:", inputs.shape)
+
+
+        inputs_flat = ["_".join(map(str, seq.tolist())) for seq in inputs]
+        unique_map = {}
+        unique_indices = []
+
+        for i, s in enumerate(inputs_flat):
+            if s not in unique_map:
+                unique_map[s] = True
+                unique_indices.append(i)
+
+        self.inputs = inputs[unique_indices].share_memory_()
+        self.targets = targets[unique_indices].share_memory_()
+
+        print("Shape after removing duplicates:", self.inputs.shape)
+        print("Removed duplicates:", inputs.shape[0] - self.inputs.shape[0])
+        print("Percent duplicates removed: {:.2f}%".format(
+            100 * (inputs.shape[0] - self.inputs.shape[0]) / inputs.shape[0]
+        ))
 
     def __len__(self):
         return self.inputs.size(0)
