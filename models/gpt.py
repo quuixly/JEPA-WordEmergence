@@ -76,7 +76,7 @@ class DecoderLayer(nn.Module):
 
 
 class GPT(nn.Module):
-    def __init__(self, n_layers = 4, n_heads = 8, d_model = 512, vocabulary_size = 63, context_window=63, dropout_rate=0.1):
+    def __init__(self, n_layers = 4, n_heads = 8, d_model = 512, vocabulary_size = 61, context_window=60, dropout_rate=0.1):
         super().__init__()
         self.embedding = nn.Embedding(vocabulary_size, d_model)
         self.positional_encoding = nn.Parameter(torch.zeros(context_window, d_model))
@@ -99,7 +99,7 @@ class GPT(nn.Module):
 
     def forward(self, x):
         batch_size, sequence_length = x.shape
-        padding_mask = (x != 61)
+        padding_mask = (x != -100)
 
         x = self.embedding(x)
         x = x + self.positional_encoding[:sequence_length, :]
@@ -135,11 +135,11 @@ class GPT(nn.Module):
         return torch.optim.AdamW(optim_groups, lr=lr, betas=betas)
 
     def get_loss_fn(self):
-        return nn.CrossEntropyLoss(ignore_index=61)
+        return nn.CrossEntropyLoss(ignore_index=-100)
 
 
 if __name__ == "__main__":
     dataset = OthelloDataset()
     model = GPT()
-    trainer = Trainer(dataset, model, 4500, 1481, True)
+    trainer = Trainer(dataset, model, 4500, 100, True)
     trainer.train()

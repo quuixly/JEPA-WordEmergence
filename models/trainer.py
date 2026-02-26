@@ -87,10 +87,23 @@ class Trainer:
                     targets = targets.to(self.device, non_blocking=True)
 
                     self.optimizer.zero_grad()
+                    inputs = torch.where(inputs == -100, 0, inputs)
                     outputs = self.model(inputs)
-                    loss = self.loss_fn(outputs, targets)
+                    loss = self.loss_fn(outputs.view(-1, outputs.size(-1)), targets.view(-1))
                     loss.backward()
                     torch.nn.utils.clip_grad_norm_(self.model.module.parameters(), 1.0)
+
+                    preds = outputs.argmax(dim=-1)
+                    mask = targets != -100
+
+                    correct = (preds == targets) & mask
+                    correct = correct.sum()
+                    total = mask.sum()
+
+                    dist.all_reduce(correct, op=dist.ReduceOp.SUM)
+                    dist.all_reduce(total, op=dist.ReduceOp.SUM)
+
+                    accuracy = (correct.float() / total.float()).item() if total > 0 else 0.0
 
                     if self.lr_decay:
                         batch_tokens = (targets >= 0).sum()
@@ -113,6 +126,7 @@ class Trainer:
                     if self.rank == 0 and pbar is not None:
                         pbar.set_postfix({
                             "loss": f"{loss.item():.4f}",
+                            "acc": f"{accuracy:.4f}",
                             "lr": f"{lr:.2e}" if self.lr_decay else self.optimizer.param_groups[0]['lr']
                         })
                         pbar.update(1)
