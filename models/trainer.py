@@ -73,7 +73,6 @@ class Trainer:
         random.seed(seed)
 
     def train(self, num_epochs=1000):
-        avg_acc = 0
         try:
             for epoch in range(num_epochs):
                 self.sampler.set_epoch(epoch)
@@ -91,20 +90,6 @@ class Trainer:
                     loss = self.loss_fn(outputs, targets)
                     loss.backward()
                     torch.nn.utils.clip_grad_norm_(self.model.module.parameters(), 1.0)
-
-                    if self.rank == 0 and self.global_step % 10 == 0:
-                        with torch.no_grad():
-                            preds = torch.argmax(outputs, dim=-1)
-                            mask = (targets != 61)
-
-                            correct_local = (preds == targets)[mask].sum().float()
-                            total_local = mask.sum().float()
-
-                            stats = torch.tensor([correct_local, total_local], device=self.device)
-
-                            dist.all_reduce(stats, op=dist.ReduceOp.SUM)
-
-                            avg_acc = (stats[0] / stats[1]).item()
 
                     if self.lr_decay:
                         batch_tokens = (targets >= 0).sum()
@@ -127,7 +112,6 @@ class Trainer:
                     if self.rank == 0 and pbar is not None:
                         pbar.set_postfix({
                             "loss": f"{loss.item():.4f}",
-                            "acc": f"{avg_acc:.4f}",
                             "lr": f"{lr:.2e}" if self.lr_decay else self.optimizer.param_groups[0]['lr']
                         })
                         pbar.update(1)
